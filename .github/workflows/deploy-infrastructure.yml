@@ -19,7 +19,6 @@ jobs:
           # Create resource group if it doesn't exist
           echo "Creating resource group..."
           az group create --name asx-db-rg \
-            --location australiaeast \
             --tags Environment=dev
 
           # Deploy Bicep template
@@ -28,7 +27,6 @@ jobs:
             --resource-group asx-db-rg \
             --template-file infrastructure/main.bicep \
             --parameters environment=dev \
-            --parameters location=australiaeast
 
       - name: Show Deployment Output
         run: |

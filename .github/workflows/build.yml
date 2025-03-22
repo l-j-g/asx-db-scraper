@@ -1,0 +1,52 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'AsxDbScraper/**'
+      - '.github/workflows/**'
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  DOTNET_VERSION: '8.0.x'
+  PROJECT_PATH: 'AsxDbScraper'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore dependencies
+        run: dotnet restore ${{ env.PROJECT_PATH }}/${{ env.PROJECT_PATH }}.csproj
+
+      - name: Build
+        run: dotnet build ${{ env.PROJECT_PATH }}/${{ env.PROJECT_PATH }}.csproj --no-restore --configuration Release
+
+      - name: Test
+        run: dotnet test ${{ env.PROJECT_PATH }}/${{ env.PROJECT_PATH }}.csproj --no-build --configuration Release --collect:"XPlat Code Coverage"
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: |
+            ${{ env.PROJECT_PATH }}/TestResults/
+            ${{ env.PROJECT_PATH }}/coverage.cobertura.xml
+
+      - name: Publish
+        run: dotnet publish ${{ env.PROJECT_PATH }}/${{ env.PROJECT_PATH }}.csproj --configuration Release --output ./publish
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: function-app
+          path: ./publish 
