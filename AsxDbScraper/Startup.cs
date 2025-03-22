@@ -38,6 +38,7 @@ public class Startup
         services.AddHttpClient();
         services.AddScoped<IAsxScraperService, AsxScraperService>();
         services.AddScoped<IAlphaVantageService, AlphaVantageService>();
+        services.AddScoped<IAsxCompanyService, AsxCompanyService>();
         services.AddDbContext<AsxDbContext>();
     }
 } 

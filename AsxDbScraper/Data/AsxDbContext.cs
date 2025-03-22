@@ -9,6 +9,7 @@ public class AsxDbContext : DbContext
     {
     }
 
+    public DbSet<AsxCompany> AsxCompanies { get; set; } = null!;
     public DbSet<BalanceSheet> BalanceSheets { get; set; } = null!;
     public DbSet<IncomeStatement> IncomeStatements { get; set; } = null!;
     public DbSet<CashFlowStatement> CashFlowStatements { get; set; } = null!;
@@ -16,6 +17,10 @@ public class AsxDbContext : DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        modelBuilder.Entity<AsxCompany>()
+            .HasIndex(c => c.Code)
+            .IsUnique();
 
         modelBuilder.Entity<BalanceSheet>()
             .HasIndex(b => new { b.CompanyCode, b.StatementDate })
