@@ -1,0 +1,15 @@
+# This is a sample CODEOWNERS file
+# Lines starting with '#' are comments.
+
+# Default owners for everything in the repo
+*       @l-j-g
+
+# Backend code
+*.cs     @l-j-g
+
+# Infrastructure code
+*.bicep  @l-j-g
+*.json   @l-j-g
+
+# Documentation
+*.md     @l-j-g

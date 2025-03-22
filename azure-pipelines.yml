@@ -1,0 +1,196 @@
+   AZURE_FUNCTIONAPP_PUBLISH_PROFILE  # Function app publish profiletrigger:
+  branches:
+    include:
+      - main
+      - develop
+  paths:
+    include:
+      - 'AsxDbScraper/**'
+      - 'infrastructure/**'
+      - 'azure-pipelines.yml'
+
+variables:
+  - group: asx-db-scraper-variables
+  - name: projectName
+    value: 'asx-db-scraper'
+  - name: dotnetVersion
+    value: '8.0.x'
+
+stages:
+  - stage: Build
+    displayName: Build and Test
+    jobs:
+      - job: Build
+        displayName: Build and Test
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          - task: UseDotNet@2
+            inputs:
+              version: $(dotnetVersion)
+              includePreviewVersions: false
+
+          - task: DotNetCoreCLI@2
+            displayName: Restore
+            inputs:
+              command: 'restore'
+              projects: '**/*.csproj'
+              feedsToUse: 'select'
+              feedRestore: 'Azure Artifacts Feed'
+
+          - task: DotNetCoreCLI@2
+            displayName: Build
+            inputs:
+              command: 'build'
+              projects: '**/*.csproj'
+              arguments: '--no-restore --configuration Release'
+
+          - task: DotNetCoreCLI@2
+            displayName: Test
+            inputs:
+              command: 'test'
+              projects: '**/*Tests.csproj'
+              arguments: '--no-build --configuration Release --collect:"XPlat Code Coverage"'
+
+          - task: PublishTestResults@2
+            inputs:
+              testResultsFormat: 'VSTest'
+              testResultsFiles: '**/TestResults/*.trx'
+            condition: succeededOrFailed()
+
+          - task: PublishCodeCoverageResults@1
+            inputs:
+              codeCoverageTool: 'Cobertura'
+              summaryFileLocation: '$(Agent.TempDirectory)/**/coverage.cobertura.xml'
+            condition: succeededOrFailed()
+
+          - task: PublishPipelineArtifact@1
+            inputs:
+              targetPath: 'AsxDbScraper/bin/Release/net8.0/publish'
+              artifact: 'drop'
+              publishLocation: 'pipeline'
+
+  - stage: DeployInfrastructure
+    displayName: Deploy Infrastructure
+    dependsOn: Build
+    condition: succeeded()
+    jobs:
+      - deployment: DeployDev
+        displayName: Deploy to Dev
+        environment: dev
+        pool:
+          vmImage: 'ubuntu-latest'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: AzureCLI@2
+                  inputs:
+                    azureSubscription: 'Azure subscription'
+                    scriptType: 'bash'
+                    scriptLocation: 'inlineScript'
+                    inlineScript: |
+                      az group create --name $(resourceGroupName) --location $(location) --tags Environment=dev
+                      az deployment group create \
+                        --resource-group $(resourceGroupName) \
+                        --template-file infrastructure/main.bicep \
+                        --parameters environment=dev \
+                        --parameters location=$(location)
+
+      - deployment: DeployStaging
+        displayName: Deploy to Staging
+        environment: staging
+        pool:
+          vmImage: 'ubuntu-latest'
+        condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: AzureCLI@2
+                  inputs:
+                    azureSubscription: 'Azure subscription'
+                    scriptType: 'bash'
+                    scriptLocation: 'inlineScript'
+                    inlineScript: |
+                      az group create --name $(resourceGroupName) --location $(location) --tags Environment=staging
+                      az deployment group create \
+                        --resource-group $(resourceGroupName) \
+                        --template-file infrastructure/main.bicep \
+                        --parameters environment=staging \
+                        --parameters location=$(location)
+
+      - deployment: DeployProd
+        displayName: Deploy to Production
+        environment: prod
+        pool:
+          vmImage: 'ubuntu-latest'
+        condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: AzureCLI@2
+                  inputs:
+                    azureSubscription: 'Azure subscription'
+                    scriptType: 'bash'
+                    scriptLocation: 'inlineScript'
+                    inlineScript: |
+                      az group create --name $(resourceGroupName) --location $(location) --tags Environment=prod
+                      az deployment group create \
+                        --resource-group $(resourceGroupName) \
+                        --template-file infrastructure/main.bicep \
+                        --parameters environment=prod \
+                        --parameters location=$(location)
+
+  - stage: DeployApplication
+    displayName: Deploy Application
+    dependsOn: DeployInfrastructure
+    condition: succeeded()
+    jobs:
+      - deployment: DeployDev
+        displayName: Deploy to Dev
+        environment: dev
+        pool:
+          vmImage: 'ubuntu-latest'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: AzureFunctionApp@1
+                  inputs:
+                    azureSubscription: 'Azure subscription'
+                    appName: '$(projectName)-dev'
+                    package: '$(Pipeline.Workspace)/drop'
+
+      - deployment: DeployStaging
+        displayName: Deploy to Staging
+        environment: staging
+        pool:
+          vmImage: 'ubuntu-latest'
+        condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: AzureFunctionApp@1
+                  inputs:
+                    azureSubscription: 'Azure subscription'
+                    appName: '$(projectName)-staging'
+                    package: '$(Pipeline.Workspace)/drop'
+
+      - deployment: DeployProd
+        displayName: Deploy to Production
+        environment: prod
+        pool:
+          vmImage: 'ubuntu-latest'
+        condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: AzureFunctionApp@1
+                  inputs:
+                    azureSubscription: 'Azure subscription'
+                    appName: '$(projectName)-prod'
+                    package: '$(Pipeline.Workspace)/drop' 

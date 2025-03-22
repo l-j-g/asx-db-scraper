@@ -1,0 +1,39 @@
+name: Deploy Infrastructure
+
+on:
+  workflow_dispatch:  # Allows manual triggering of the workflow
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy Infrastructure
+        run: |
+          # Create resource group if it doesn't exist
+          echo "Creating resource group..."
+          az group create --name asx-db-rg \
+            --location australiaeast \
+            --tags Environment=dev
+
+          # Deploy Bicep template
+          echo "Deploying Bicep template..."
+          az deployment group create \
+            --resource-group asx-db-rg \
+            --template-file infrastructure/main.bicep \
+            --parameters environment=dev \
+            --parameters location=australiaeast
+
+      - name: Show Deployment Output
+        run: |
+          echo "Deployment completed. Showing outputs..."
+          az deployment group show \
+            --resource-group asx-db-rg \
+            --name main \
+            --query properties.outputs 
