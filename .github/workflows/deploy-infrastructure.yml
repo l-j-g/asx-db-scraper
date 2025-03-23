@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       environment:
-        description: 'Environment to deploy to (dev/prod)'
+        description: "Environment to deploy to (dev/prod)"
         required: true
-        default: 'dev'
+        default: "dev"
         type: choice
         options:
           - dev
@@ -27,7 +27,7 @@ jobs:
         run: |
           # Get location from parameters file
           LOCATION=$(jq -r '.parameters.location.value' infrastructure/main.parameters.${{ github.event.inputs.environment }}.json)
-          
+
           # Create resource group if it doesn't exist
           echo "Creating resource group..."
           az group create --name asx-db-rg \
@@ -40,6 +40,7 @@ jobs:
             --resource-group asx-db-rg \
             --template-file infrastructure/main.bicep \
             --parameters @infrastructure/main.parameters.${{ github.event.inputs.environment }}.json \
+            --parameters githubPrincipalId=${{ secrets.GITHUB_PRINCIPAL_ID }} \
             --mode Incremental
 
       - name: Show Deployment Output
@@ -48,4 +49,4 @@ jobs:
           az deployment group show \
             --resource-group asx-db-rg \
             --name main \
-            --query properties.outputs 
+            --query properties.outputs

@@ -2,13 +2,13 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   workflow_dispatch:
     inputs:
       environment:
-        description: 'Environment to deploy to (dev/prod)'
+        description: "Environment to deploy to (dev/prod)"
         required: true
-        default: 'dev'
+        default: "dev"
         type: choice
         options:
           - dev
@@ -19,11 +19,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v3
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: "8.0.x"
 
       - name: Restore dependencies
         run: dotnet restore
@@ -61,27 +61,8 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Assign Storage Blob Data Contributor Role
-        run: |
-          # Get storage account name from function app settings
-          STORAGE_ACCOUNT=$(az functionapp show \
-            --name asx-db-scraper-${{ github.event.inputs.environment || 'dev' }} \
-            --resource-group asx-db-rg \
-            --query "siteConfig.appSettings[?name=='AzureWebJobsStorage'].value" \
-            --output tsv | cut -d';' -f3 | cut -d'=' -f2)
-          
-          # Get service principal object ID
-          SP_OBJECT_ID=$(az ad sp list --display-name "asx-db-scraper-github" --query "[0].id" -o tsv)
-          
-          # Assign Storage Blob Data Contributor role
-          az role assignment create \
-            --assignee-object-id $SP_OBJECT_ID \
-            --assignee-principal-type ServicePrincipal \
-            --role "Storage Blob Data Contributor" \
-            --scope "/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/asx-db-rg/providers/Microsoft.Storage/storageAccounts/$STORAGE_ACCOUNT"
-
       - name: Deploy Function App
         uses: Azure/functions-action@v1
         with:
           app-name: asx-db-scraper-${{ github.event.inputs.environment || 'dev' }}
-          package: ./publish 
+          package: ./publish

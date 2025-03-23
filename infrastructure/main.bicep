@@ -11,7 +11,8 @@ param projectName string
 param functionAppName string = '${projectName}-${environment}'
 
 @description('The Cosmos DB account name')
-param cosmosDbAccountName string = '${projectName}-${environment}-${uniqueSuffix}'
+param cosmosDbAccountName string
+
 @description('The Cosmos DB database name')
 param cosmosDbName string = 'AsxDbScraper'
 
@@ -34,8 +35,13 @@ param containers array = [
     name: 'CashFlowStatements'
   }
 ]
-@description('The Key Vault name')
-param keyVaultName string = '${projectName}-${environment}-${uniqueSuffix}-kv'
+
+// Move the name generation to variables
+var defaultCosmosDbName = '${projectName}-${environment}-${uniqueSuffix}'
+var defaultKeyVaultName = '${projectName}-${environment}-${uniqueSuffix}-kv'
+
+// Get the GitHub Actions service principal ID from a parameter
+param githubPrincipalId string
 
 // Create storage account for function app
 resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
@@ -127,7 +133,7 @@ resource appServicePlan 'Microsoft.Web/serverfarms@2022-09-01' = {
 
 // Create Key Vault
 resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
-  name: keyVaultName
+  name: defaultKeyVaultName
   location: location
   properties: {
     enabledForDeployment: true
@@ -216,6 +222,20 @@ resource functionAppSettings 'Microsoft.Web/sites/config@2022-09-01' = {
     'CosmosDb__DatabaseName': cosmosDbName
     'CosmosDb__ContainerName': containers[0].name
     'AlphaVantage__ApiKey': '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/AlphaVantageApiKey/)'
+  }
+}
+
+// Add role assignment to storage account
+resource storageRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(resourceGroup().id, storageAccount.id, 'StorageBlobDataContributor')
+  scope: storageAccount
+  properties: {
+    roleDefinitionId: subscriptionResourceId(
+      'Microsoft.Authorization/roleDefinitions',
+      'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
+    ) // Storage Blob Data Contributor role
+    principalId: githubPrincipalId
+    principalType: 'ServicePrincipal'
   }
 }
 
