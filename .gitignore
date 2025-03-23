@@ -6,7 +6,7 @@ obj/
 *.suo
 *.userprefs
 .vs/
-.vscode/
+
 *.swp
 *.*~
 project.lock.json
@@ -30,7 +30,7 @@ bin
 obj
 appsettings.json
 local.settings.json
-.vscode/
+
 host.json
 
 # SQL Server
