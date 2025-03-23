@@ -5,16 +5,17 @@ param location string = resourceGroup().location
 param environment string
 
 @description('The project name')
-param projectName string = 'asx-db-scraper'
+param projectName string = 'asxdb'
 
 @description('The function app name')
 param functionAppName string = '${projectName}-${environment}'
 
 @description('The Cosmos DB account name')
-param cosmosDbAccountName string = '${projectName}-${environment}'
-
+param cosmosDbAccountName string = '${projectName}-${environment}-cosmos-db-account'
 @description('The Cosmos DB database name')
 param cosmosDbName string = 'AsxDbScraper'
+
+var storageAccountName = '${projectName}${environment}storage'
 
 @description('The Cosmos DB container names')
 param containers array = [
@@ -31,18 +32,8 @@ param containers array = [
     name: 'CashFlowStatements'
   }
 ]
-
-// API Versions
-var apiVersions = {
-  storage: '2023-01-01'
-  cosmosDb: '2023-11-15'
-  keyVault: '2023-07-01'
-  webApp: '2022-09-01'
-}
-
-// Generate a unique name for the storage account (max 24 chars, lowercase alphanumeric)
-var storageAccountPrefix = replace(toLower('${projectName}${environment}'), '-', '')
-var storageAccountName = '${take(storageAccountPrefix, 16)}${take(uniqueString(resourceGroup().id), 8)}'
+@description('The Key Vault name')
+param keyVaultName string = '${projectName}-${environment}-kv'
 
 // Create storage account for function app
 resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
@@ -134,7 +125,7 @@ resource appServicePlan 'Microsoft.Web/serverfarms@2022-09-01' = {
 
 // Create Key Vault
 resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
-  name: '${projectName}-${environment}-kv'
+  name: keyVaultName
   location: location
   properties: {
     enabledForDeployment: true
@@ -149,7 +140,7 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
   }
 }
 
-// Create Function App
+// Create Function App without Key Vault reference initially
 resource functionApp 'Microsoft.Web/sites@2022-09-01' = {
   name: functionAppName
   location: location
@@ -182,13 +173,9 @@ resource functionApp 'Microsoft.Web/sites@2022-09-01' = {
           name: 'CosmosDb__ContainerName'
           value: containers[0].name
         }
-        {
-          name: 'AlphaVantage__ApiKey'
-          value: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/AlphaVantageApiKey/)'
-        }
       ]
       cors: {
-        allowedOrigins: [ 'http://localhost:3000', 'https://localhost:3000' ]
+        allowedOrigins: ['http://localhost:3000', 'https://localhost:3000']
         supportCredentials: true
       }
     }
@@ -198,7 +185,7 @@ resource functionApp 'Microsoft.Web/sites@2022-09-01' = {
   }
 }
 
-// Update Key Vault access policy
+// Update Key Vault access policy after Function App is created
 resource keyVaultAccessPolicy 'Microsoft.KeyVault/vaults/accessPolicies@2023-07-01' = {
   parent: keyVault
   name: 'add'
@@ -215,7 +202,22 @@ resource keyVaultAccessPolicy 'Microsoft.KeyVault/vaults/accessPolicies@2023-07-
   }
 }
 
-// Output values (excluding secrets)
+// Add Key Vault reference to Function App after access policy is set
+resource functionAppSettings 'Microsoft.Web/sites/config@2022-09-01' = {
+  parent: functionApp
+  name: 'appsettings'
+  properties: {
+    AzureWebJobsStorage: 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};AccountKey=${storageAccount.listKeys().keys[0].value};EndpointSuffix=core.windows.net'
+    FUNCTIONS_WORKER_RUNTIME: 'dotnet'
+    FUNCTIONS_EXTENSION_VERSION: '~4'
+    'CosmosDb__ConnectionString': cosmosDbAccount.listConnectionStrings().connectionStrings[0].connectionString
+    'CosmosDb__DatabaseName': cosmosDbName
+    'CosmosDb__ContainerName': containers[0].name
+    'AlphaVantage__ApiKey': '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/AlphaVantageApiKey/)'
+  }
+}
+
+// Output values (no secrets)
 output functionAppName string = functionApp.name
 output cosmosDbName string = cosmosDbName
 output keyVaultName string = keyVault.name
