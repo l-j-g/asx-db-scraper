@@ -7,41 +7,31 @@ param location string
 @description('The project name')
 param projectName string
 
-@description('The function app name')
-param functionAppName string = '${projectName}-${environment}'
+@description('The storage account name')
+param storageAccountName string = replace(toLower('${projectName}${environment}'), '-', '')
 
 @description('The Cosmos DB account name')
-param cosmosDbAccountName string
+param cosmosDbAccountName string = '${projectName}-${environment}'
 
 @description('The Cosmos DB database name')
 param cosmosDbName string = 'AsxDbScraper'
 
-// Generate unique names using parameters
-var uniqueSuffix = uniqueString(resourceGroup().id)
-var storageAccountName = replace(toLower('${projectName}${environment}${uniqueSuffix}'), '-', '')
+@description('The Key Vault name')
+param keyVaultName string = '${projectName}-${environment}-kv'
+
+@description('The GitHub Service Principal ID')
+param githubPrincipalId string
+
+// Single Function App name without environment suffix
+var functionAppName = projectName
 
 @description('The Cosmos DB container names')
 param containers array = [
-  {
-    name: 'Companies'
-  }
-  {
-    name: 'BalanceSheets'
-  }
-  {
-    name: 'IncomeStatements'
-  }
-  {
-    name: 'CashFlowStatements'
-  }
+  { name: 'Companies' }
+  { name: 'BalanceSheets' }
+  { name: 'IncomeStatements' }
+  { name: 'CashFlowStatements' }
 ]
-
-// Move the name generation to variables
-var defaultCosmosDbName = '${projectName}-${environment}-${uniqueSuffix}'
-var defaultKeyVaultName = '${projectName}-${environment}-${uniqueSuffix}-kv'
-
-// Get the GitHub Actions service principal ID from a parameter
-param githubPrincipalId string
 
 // Create storage account for function app
 resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
@@ -55,7 +45,7 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
     minimumTlsVersion: 'TLS1_2'
     allowBlobPublicAccess: false
     networkAcls: {
-      defaultAction: 'Deny'
+      defaultAction: 'Allow' // Changed from 'Deny' to 'Allow'
       bypass: 'AzureServices'
     }
   }
@@ -79,7 +69,7 @@ resource cosmosDbAccount 'Microsoft.DocumentDB/databaseAccounts@2023-11-15' = {
     enableAutomaticFailover: true
     networkAclBypass: 'AzureServices'
     networkAclBypassResourceIds: []
-    publicNetworkAccess: 'Disabled'
+    publicNetworkAccess: 'Enabled' // Changed from 'Disabled' to 'Enabled'
     virtualNetworkRules: []
   }
 }
@@ -131,9 +121,9 @@ resource appServicePlan 'Microsoft.Web/serverfarms@2022-09-01' = {
   }
 }
 
-// Create Key Vault
+// Create Key Vault first to avoid circular dependency
 resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
-  name: defaultKeyVaultName
+  name: keyVaultName
   location: location
   properties: {
     enabledForDeployment: true
@@ -148,7 +138,7 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
   }
 }
 
-// Create Function App without Key Vault reference initially
+// Create single Function App (production slot)
 resource functionApp 'Microsoft.Web/sites@2022-09-01' = {
   name: functionAppName
   location: location
@@ -181,9 +171,13 @@ resource functionApp 'Microsoft.Web/sites@2022-09-01' = {
           name: 'CosmosDb__ContainerName'
           value: containers[0].name
         }
+        {
+          name: 'AlphaVantage__ApiKey'
+          value: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/AlphaVantageApiKey/)'
+        }
       ]
       cors: {
-        allowedOrigins: ['http://localhost:3000', 'https://localhost:3000']
+        allowedOrigins: ['http://localhost:3000']
         supportCredentials: true
       }
     }
@@ -193,8 +187,62 @@ resource functionApp 'Microsoft.Web/sites@2022-09-01' = {
   }
 }
 
-// Update Key Vault access policy after Function App is created
-resource keyVaultAccessPolicy 'Microsoft.KeyVault/vaults/accessPolicies@2023-07-01' = {
+// Create dev deployment slot
+resource devSlot 'Microsoft.Web/sites/slots@2022-09-01' = {
+  parent: functionApp
+  name: 'dev'
+  location: location
+  kind: 'functionapp'
+  properties: {
+    serverFarmId: appServicePlan.id
+    siteConfig: {
+      appSettings: [
+        {
+          name: 'AzureWebJobsStorage'
+          value: 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};AccountKey=${storageAccount.listKeys().keys[0].value};EndpointSuffix=core.windows.net'
+        }
+        {
+          name: 'FUNCTIONS_WORKER_RUNTIME'
+          value: 'dotnet'
+        }
+        {
+          name: 'FUNCTIONS_EXTENSION_VERSION'
+          value: '~4'
+        }
+        {
+          name: 'CosmosDb__ConnectionString'
+          value: cosmosDbAccount.listConnectionStrings().connectionStrings[0].connectionString
+        }
+        {
+          name: 'CosmosDb__DatabaseName'
+          value: cosmosDbName
+        }
+        {
+          name: 'CosmosDb__ContainerName'
+          value: containers[0].name
+        }
+        {
+          name: 'AlphaVantage__ApiKey'
+          value: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/AlphaVantageApiKey/)'
+        }
+        {
+          name: 'SLOT_NAME'
+          value: 'dev'
+        }
+      ]
+      cors: {
+        allowedOrigins: ['http://localhost:3000']
+        supportCredentials: true
+      }
+    }
+  }
+  identity: {
+    type: 'SystemAssigned'
+  }
+}
+
+// Update Key Vault access policy for Function App
+resource functionAppKeyVaultPolicy 'Microsoft.KeyVault/vaults/accessPolicies@2023-07-01' = {
   parent: keyVault
   name: 'add'
   properties: {
@@ -210,22 +258,24 @@ resource keyVaultAccessPolicy 'Microsoft.KeyVault/vaults/accessPolicies@2023-07-
   }
 }
 
-// Add Key Vault reference to Function App after access policy is set
-resource functionAppSettings 'Microsoft.Web/sites/config@2022-09-01' = {
-  parent: functionApp
-  name: 'appsettings'
+// Update Key Vault access policy for Dev Slot
+resource devSlotKeyVaultPolicy 'Microsoft.KeyVault/vaults/accessPolicies@2023-07-01' = {
+  parent: keyVault
+  name: 'add'
   properties: {
-    AzureWebJobsStorage: 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};AccountKey=${storageAccount.listKeys().keys[0].value};EndpointSuffix=core.windows.net'
-    FUNCTIONS_WORKER_RUNTIME: 'dotnet'
-    FUNCTIONS_EXTENSION_VERSION: '~4'
-    'CosmosDb__ConnectionString': cosmosDbAccount.listConnectionStrings().connectionStrings[0].connectionString
-    'CosmosDb__DatabaseName': cosmosDbName
-    'CosmosDb__ContainerName': containers[0].name
-    'AlphaVantage__ApiKey': '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/AlphaVantageApiKey/)'
+    accessPolicies: [
+      {
+        tenantId: subscription().tenantId
+        objectId: devSlot.identity.principalId
+        permissions: {
+          secrets: ['get', 'list']
+        }
+      }
+    ]
   }
 }
 
-// Add role assignment to storage account
+// Add Storage Blob Data Contributor role to GitHub service principal
 resource storageRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(resourceGroup().id, storageAccount.id, 'StorageBlobDataContributor')
   scope: storageAccount
@@ -241,5 +291,6 @@ resource storageRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-
 
 // Output values (no secrets)
 output functionAppName string = functionApp.name
-output cosmosDbName string = cosmosDbAccountName
 output keyVaultName string = keyVault.name
+output cosmosDbName string = cosmosDbName
+output storageAccountName string = storageAccount.name
