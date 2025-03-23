@@ -108,6 +108,7 @@ public class AsxCompanyService : IAsxCompanyService
                     existing.LastUpdated = DateTime.UtcNow;
                     existing.IsActive = true;
                     _logger.LogInformation("Updated ASX company {Code}", existing.Code);
+                }
             }
 
             await _dbContext.SaveChangesAsync();
