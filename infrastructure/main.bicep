@@ -1,21 +1,23 @@
-@description('The location for all resources')
-param location string = resourceGroup().location
-
-@description('The environment (dev, staging, prod)')
+@description('The environment (dev, prod)')
 param environment string
 
+@description('The location for all resources')
+param location string
+
 @description('The project name')
-param projectName string = 'asxdb'
+param projectName string
 
 @description('The function app name')
 param functionAppName string = '${projectName}-${environment}'
 
 @description('The Cosmos DB account name')
-param cosmosDbAccountName string = '${projectName}-${environment}-cosmos-db-account'
+param cosmosDbAccountName string = '${projectName}-${environment}-${uniqueSuffix}'
 @description('The Cosmos DB database name')
 param cosmosDbName string = 'AsxDbScraper'
 
-var storageAccountName = '${projectName}${environment}storage'
+// Generate unique names using parameters
+var uniqueSuffix = uniqueString(resourceGroup().id)
+var storageAccountName = replace(toLower('${projectName}${environment}${uniqueSuffix}'), '-', '')
 
 @description('The Cosmos DB container names')
 param containers array = [
@@ -33,7 +35,7 @@ param containers array = [
   }
 ]
 @description('The Key Vault name')
-param keyVaultName string = '${projectName}-${environment}-kv'
+param keyVaultName string = '${projectName}-${environment}-${uniqueSuffix}-kv'
 
 // Create storage account for function app
 resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
@@ -219,5 +221,5 @@ resource functionAppSettings 'Microsoft.Web/sites/config@2022-09-01' = {
 
 // Output values (no secrets)
 output functionAppName string = functionApp.name
-output cosmosDbName string = cosmosDbName
+output cosmosDbName string = cosmosDbAccountName
 output keyVaultName string = keyVault.name

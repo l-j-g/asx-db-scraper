@@ -1,17 +1,11 @@
-name: Build and Test
+name: Build
 
 on:
   push:
-    branches: [ main, develop ]
-    paths:
-      - 'AsxDbScraper/**'
-      - '.github/workflows/**'
+    branches: [ main ]
   pull_request:
-    branches: [ main, develop ]
-
-env:
-  DOTNET_VERSION: '8.0.x'
-  PROJECT_PATH: 'AsxDbScraper'
+    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   build:
@@ -20,18 +14,18 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v3
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
+          dotnet-version: '8.0.x'
 
       - name: Restore dependencies
-        run: dotnet restore ${{ env.PROJECT_PATH }}/${{ env.PROJECT_PATH }}.csproj
+        run: dotnet restore
 
       - name: Build
-        run: dotnet build ${{ env.PROJECT_PATH }}/${{ env.PROJECT_PATH }}.csproj --no-restore --configuration Release
+        run: dotnet build --no-restore
 
       - name: Test
-        run: dotnet test ${{ env.PROJECT_PATH }}/${{ env.PROJECT_PATH }}.csproj --no-build --configuration Release --collect:"XPlat Code Coverage"
+        run: dotnet test --no-build --verbosity normal
 
       - name: Upload test results
         uses: actions/upload-artifact@v4

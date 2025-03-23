@@ -2,99 +2,67 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ main, develop ]
-    paths:
-      - 'AsxDbScraper/**'
-      - 'infrastructure/**'
-      - '.github/workflows/**'
-  pull_request:
-    branches: [ main, develop ]
-
-env:
-  AZURE_FUNCTIONAPP_NAME: asx-db-scraper
-  AZURE_FUNCTIONAPP_PACKAGE_PATH: 'AsxDbScraper'
-  DOTNET_VERSION: '8.0.x'
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to (dev/prod)'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - prod
 
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
+      
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v3
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
+          dotnet-version: '8.0.x'
 
       - name: Restore dependencies
         run: dotnet restore
 
       - name: Build
-        run: dotnet build --no-restore --configuration Release
+        run: dotnet build --no-restore
 
       - name: Test
-        run: dotnet test --no-build --configuration Release --collect:"XPlat Code Coverage"
+        run: dotnet test --no-build --verbosity normal
 
-      - name: Upload test results
-        uses: actions/upload-artifact@v4
-        if: always()
+      - name: Publish
+        run: dotnet publish -c Release -o ./publish
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
         with:
-          name: test-results
-          path: |
-            **/TestResults/*.trx
-            **/coverage.cobertura.xml
+          name: function-app
+          path: ./publish
 
-  deploy-infrastructure:
+  deploy:
     needs: build-and-test
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
     runs-on: ubuntu-latest
-    environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'development' }}
-    
+    environment: ${{ github.event.inputs.environment || 'dev' }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Download artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: function-app
+          path: ./publish
 
       - name: Azure Login
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Deploy Infrastructure
-        run: |
-          # Create resource group if it doesn't exist
-          az group create --name ${{ env.AZURE_FUNCTIONAPP_NAME }}-rg \
-            --location australiaeast \
-            --tags Environment=${{ github.ref == 'refs/heads/main' && 'prod' || 'dev' }}
-
-          # Deploy Bicep template
-          az deployment group create \
-            --resource-group ${{ env.AZURE_FUNCTIONAPP_NAME }}-rg \
-            --template-file infrastructure/main.bicep \
-            --parameters environment=${{ github.ref == 'refs/heads/main' && 'prod' || 'dev' }} \
-            --parameters location=australiaeast
-
-  deploy-function-app:
-    needs: deploy-infrastructure
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
-    runs-on: ubuntu-latest
-    environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'development' }}
-    
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
-
-      - name: 'Publish Function App'
-        run: |
-          dotnet publish ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }} \
-            --configuration Release \
-            --output ./publish
-
-      - name: 'Deploy to Azure Function App'
+      - name: Deploy Function App
         uses: Azure/functions-action@v1
         with:
-          app-name: ${{ env.AZURE_FUNCTIONAPP_NAME }}-${{ github.ref == 'refs/heads/main' && 'prod' || 'dev' }}
-          package: ./publish
-          publish-profile: ${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE }} 
+          app-name: asx-db-scraper-${{ github.event.inputs.environment || 'dev' }}
+          package: ./publish 
