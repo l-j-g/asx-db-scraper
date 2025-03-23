@@ -37,7 +37,7 @@ jobs:
         run: dotnet test --no-build --verbosity normal
 
       - name: Publish
-        run: dotnet publish AsxDbScraper/AsxDbScraper.csproj -c Release -o ./publish
+        run: dotnet publish "AsxDbScraper/AsxDbScraper.csproj" --configuration Release --output ./publish
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -48,9 +48,6 @@ jobs:
   deploy:
     needs: build-and-test
     runs-on: ubuntu-latest
-    env:
-      DEPLOY_ENV: "${{ github.event.inputs.environment || (github.ref == 'refs/heads/main' ? 'prod' : 'dev') }}"
-    environment: "${{ github.event.inputs.environment || (github.ref == 'refs/heads/main' ? 'prod' : 'dev') }}"
     steps:
       - uses: actions/checkout@v4
 
@@ -60,16 +57,45 @@ jobs:
           name: function-app
           path: ./publish
 
+      - name: Set environment variables
+        run: |
+          if [[ "${{ github.event.inputs.environment }}" != "" ]]; then
+            echo "DEPLOY_ENV=${{ github.event.inputs.environment }}" >> $GITHUB_ENV
+            echo "ENVIRONMENT=${{ github.event.inputs.environment }}" >> $GITHUB_ENV
+          elif [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            echo "DEPLOY_ENV=prod" >> $GITHUB_ENV
+            echo "ENVIRONMENT=prod" >> $GITHUB_ENV
+          else
+            echo "DEPLOY_ENV=dev" >> $GITHUB_ENV
+            echo "ENVIRONMENT=dev" >> $GITHUB_ENV
+          fi
+
+      - name: Set deployment context
+        run: |
+          echo "Deploying to ${{ env.DEPLOY_ENV }} environment"
+          echo "Triggered by ${{ github.event_name }} event"
+          echo "Branch: ${{ github.ref }}"
+
       - name: Azure Login
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
+      - name: Set slot name
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/main" && "${{ github.event.inputs.environment }}" == "" ]]; then
+            echo "SLOT_NAME=production" >> $GITHUB_ENV
+          elif [[ "${{ github.event.inputs.environment }}" != "" ]]; then
+            echo "SLOT_NAME=${{ github.event.inputs.environment }}" >> $GITHUB_ENV
+          else
+            echo "SLOT_NAME=dev" >> $GITHUB_ENV
+          fi
+
       - name: Deploy to Function App Slot
         uses: Azure/functions-action@v1
         with:
           app-name: asx-db-scraper
-          slot-name: "${{ github.event.inputs.environment || (github.ref == 'refs/heads/main' ? 'production' : 'dev') }}"
+          slot-name: ${{ env.SLOT_NAME }}
           package: ./publish
           publish-profile: ${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE }}
 
@@ -81,12 +107,9 @@ jobs:
             --parameters @infrastructure/main.parameters.${{ env.DEPLOY_ENV }}.json \
             --mode Incremental
 
-      - name: Set deployment context
-        run: |
-          echo "Deploying to ${{ env.DEPLOY_ENV }} environment"
-          echo "Triggered by ${{ github.event_name }} event"
-          echo "Branch: ${{ github.ref }}"
-
+      # Optional: Only needed if you're using a blue-green deployment strategy
+      # This swaps staging and production slots for zero-downtime deployments
+      # Comment this out if you're deploying directly to slots instead of using swap strategy
       - name: Swap Slots
         if: github.ref == 'refs/heads/main'
         run: |
