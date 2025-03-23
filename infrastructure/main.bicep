@@ -1,6 +1,3 @@
-@description('The name of the resource group')
-param resourceGroupName string
-
 @description('The location for all resources')
 param location string = resourceGroup().location
 
@@ -35,8 +32,17 @@ param containers array = [
   }
 ]
 
-// Generate a unique name for the storage account
-var storageAccountName = '${projectName}${environment}${uniqueString(resourceGroup().id)}'
+// API Versions
+var apiVersions = {
+  storage: '2023-01-01'
+  cosmosDb: '2023-11-15'
+  keyVault: '2023-07-01'
+  webApp: '2022-09-01'
+}
+
+// Generate a unique name for the storage account (max 24 chars, lowercase alphanumeric)
+var storageAccountPrefix = replace(toLower('${projectName}${environment}'), '-', '')
+var storageAccountName = '${take(storageAccountPrefix, 16)}${take(uniqueString(resourceGroup().id), 8)}'
 
 // Create storage account for function app
 resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
@@ -126,7 +132,7 @@ resource appServicePlan 'Microsoft.Web/serverfarms@2022-09-01' = {
   }
 }
 
-// Create Key Vault first to avoid circular dependency
+// Create Key Vault
 resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
   name: '${projectName}-${environment}-kv'
   location: location
@@ -147,6 +153,7 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
 resource functionApp 'Microsoft.Web/sites@2022-09-01' = {
   name: functionAppName
   location: location
+  kind: 'functionapp'
   properties: {
     serverFarmId: appServicePlan.id
     siteConfig: {
@@ -160,29 +167,29 @@ resource functionApp 'Microsoft.Web/sites@2022-09-01' = {
           value: 'dotnet'
         }
         {
-          name: 'CosmosDb:ConnectionString'
+          name: 'FUNCTIONS_EXTENSION_VERSION'
+          value: '~4'
+        }
+        {
+          name: 'CosmosDb__ConnectionString'
           value: cosmosDbAccount.listConnectionStrings().connectionStrings[0].connectionString
         }
         {
-          name: 'CosmosDb:DatabaseName'
+          name: 'CosmosDb__DatabaseName'
           value: cosmosDbName
         }
         {
-          name: 'CosmosDb:ContainerName'
+          name: 'CosmosDb__ContainerName'
           value: containers[0].name
         }
         {
-          name: 'AlphaVantage:ApiKey'
+          name: 'AlphaVantage__ApiKey'
           value: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/AlphaVantageApiKey/)'
         }
       ]
       cors: {
-        allowedOrigins: ['*']
-        allowedMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
-        allowedHeaders: ['*']
-        exposedHeaders: []
-        maxAgeInSeconds: 86400
-        allowCredentials: true
+        allowedOrigins: [ 'http://localhost:3000', 'https://localhost:3000' ]
+        supportCredentials: true
       }
     }
   }
@@ -191,7 +198,7 @@ resource functionApp 'Microsoft.Web/sites@2022-09-01' = {
   }
 }
 
-// Update Key Vault access policy after Function App is created
+// Update Key Vault access policy
 resource keyVaultAccessPolicy 'Microsoft.KeyVault/vaults/accessPolicies@2023-07-01' = {
   parent: keyVault
   name: 'add'
