@@ -91,22 +91,24 @@ resource cosmosDb 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases@2023-11-15
 }
 
 // Create Cosmos DB containers
-resource cosmosDbContainers 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2023-11-15' = [for container in containers: {
-  parent: cosmosDb
-  name: container.name
-  properties: {
-    resource: {
-      id: container.name
-      partitionKey: {
-        paths: ['/id']
-      }
-      indexingPolicy: {
-        indexingMode: 'consistent'
-        automatic: true
+resource cosmosDbContainers 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2023-11-15' = [
+  for container in containers: {
+    parent: cosmosDb
+    name: container.name
+    properties: {
+      resource: {
+        id: container.name
+        partitionKey: {
+          paths: ['/id']
+        }
+        indexingPolicy: {
+          indexingMode: 'consistent'
+          automatic: true
+        }
       }
     }
   }
-}]
+]
 
 // Create App Service Plan
 resource appServicePlan 'Microsoft.Web/serverfarms@2022-09-01' = {
@@ -117,11 +119,27 @@ resource appServicePlan 'Microsoft.Web/serverfarms@2022-09-01' = {
   }
   kind: 'functionapp'
   properties: {
-    name: '${functionAppName}-plan'
     reserved: true
     targetWorkerCount: 1
     maximumElasticWorkerCount: 1
     perSiteScaling: false
+  }
+}
+
+// Create Key Vault first to avoid circular dependency
+resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
+  name: '${projectName}-${environment}-kv'
+  location: location
+  properties: {
+    enabledForDeployment: true
+    enabledForTemplateDeployment: true
+    enabledForDiskEncryption: true
+    tenantId: subscription().tenantId
+    accessPolicies: []
+    sku: {
+      name: 'standard'
+      family: 'A'
+    }
   }
 }
 
@@ -130,7 +148,6 @@ resource functionApp 'Microsoft.Web/sites@2022-09-01' = {
   name: functionAppName
   location: location
   properties: {
-    name: functionAppName
     serverFarmId: appServicePlan.id
     siteConfig: {
       appSettings: [
@@ -174,15 +191,11 @@ resource functionApp 'Microsoft.Web/sites@2022-09-01' = {
   }
 }
 
-// Create Key Vault
-resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
-  name: '${projectName}-${environment}-kv'
-  location: location
+// Update Key Vault access policy after Function App is created
+resource keyVaultAccessPolicy 'Microsoft.KeyVault/vaults/accessPolicies@2023-07-01' = {
+  parent: keyVault
+  name: 'add'
   properties: {
-    enabledForDeployment: true
-    enabledForTemplateDeployment: true
-    enabledForDiskEncryption: true
-    tenantId: subscription().tenantId
     accessPolicies: [
       {
         tenantId: subscription().tenantId
@@ -192,14 +205,10 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
         }
       }
     ]
-    sku: {
-      name: 'standard'
-      family: 'A'
-    }
   }
 }
 
-// Output values
+// Output values (excluding secrets)
 output functionAppName string = functionApp.name
-output cosmosDbConnectionString string = cosmosDbAccount.listConnectionStrings().connectionStrings[0].connectionString
-output keyVaultName string = keyVault.name 
+output cosmosDbName string = cosmosDbName
+output keyVaultName string = keyVault.name
