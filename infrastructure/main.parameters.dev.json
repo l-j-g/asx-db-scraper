@@ -10,12 +10,6 @@
     },
     "projectName": {
       "value": "asx-db-scraper"
-    },
-    "cosmosDbAccountName": {
-      "value": "[concat('asx-db-scraper-dev-', uniqueString(resourceGroup().id))]"
-    },
-    "keyVaultName": {
-      "value": "[concat('asx-db-scraper-dev-', uniqueString(resourceGroup().id), '-kv')]"
     }
   }
 }
