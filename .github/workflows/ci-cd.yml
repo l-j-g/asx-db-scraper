@@ -46,7 +46,8 @@ jobs:
   deploy:
     needs: build-and-test
     runs-on: ubuntu-latest
-    environment: ${{ github.event.inputs.environment || 'dev' }}
+    # This allows you to set up approvals for production deployments
+    environment: ${{ github.event.inputs.environment || (github.ref == 'refs/heads/main' ? 'prod' : 'dev') }}
     steps:
       - uses: actions/checkout@v4
 
@@ -64,5 +65,19 @@ jobs:
       - name: Deploy Function App
         uses: Azure/functions-action@v1
         with:
-          app-name: asx-db-scraper-${{ github.event.inputs.environment || 'dev' }}
+          app-name: asx-db-scraper-${{ env.DEPLOY_ENV }}
           package: ./publish
+
+      - name: Deploy Infrastructure
+        run: |
+          az deployment group create \
+            --resource-group asx-db-rg \
+            --template-file infrastructure/main.bicep \
+            --parameters @infrastructure/main.parameters.${{ env.DEPLOY_ENV }}.json \
+            --mode Incremental
+
+      - name: Set deployment context
+        run: |
+          echo "Deploying to ${{ env.DEPLOY_ENV }} environment"
+          echo "Triggered by ${{ github.event_name }} event"
+          echo "Branch: ${{ github.ref }}"
