@@ -1,11 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Serilog;
-using Serilog.Extensions.Logging;
 using AsxDbScraper.Services;
 using AsxDbScraper.Data;
-using System.IO;
 
 namespace AsxDbScraper;
 

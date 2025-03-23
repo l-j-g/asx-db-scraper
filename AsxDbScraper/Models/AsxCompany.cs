@@ -1,5 +1,3 @@
-using System;
-
 namespace AsxDbScraper.Models;
 
 public class AsxCompany
