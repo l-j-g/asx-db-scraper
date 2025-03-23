@@ -62,11 +62,13 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Deploy Function App
+      - name: Deploy to Function App Slot
         uses: Azure/functions-action@v1
         with:
-          app-name: asx-db-scraper-${{ env.DEPLOY_ENV }}
+          app-name: asx-db-scraper
+          slot-name: ${{ github.event.inputs.environment || (github.ref == 'refs/heads/main' ? 'production' : 'dev') }}
           package: ./publish
+          publish-profile: ${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE }}
 
       - name: Deploy Infrastructure
         run: |
@@ -81,3 +83,12 @@ jobs:
           echo "Deploying to ${{ env.DEPLOY_ENV }} environment"
           echo "Triggered by ${{ github.event_name }} event"
           echo "Branch: ${{ github.ref }}"
+
+      - name: Swap Slots
+        if: github.ref == 'refs/heads/main'
+        run: |
+          az functionapp deployment slot swap \
+            --name asx-db-scraper \
+            --resource-group asx-db-rg \
+            --slot staging \
+            --target-slot production
