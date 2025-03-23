@@ -81,6 +81,15 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
+      - name: Deploy Infrastructure
+        run: |
+          az deployment group create \
+            --resource-group asx-db-rg \
+            --template-file infrastructure/main.bicep \
+            --parameters @infrastructure/main.parameters.${{ env.DEPLOY_ENV }}.json \
+            --parameters githubPrincipalId=${{ secrets.GITHUB_PRINCIPAL_ID }} \
+            --mode Incremental
+
       - name: Set slot name
         run: |
           if [[ "${{ github.ref }}" == "refs/heads/main" && "${{ github.event.inputs.environment }}" == "" ]]; then
@@ -98,14 +107,6 @@ jobs:
           slot-name: ${{ env.SLOT_NAME }}
           package: ./publish
           publish-profile: ${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE }}
-
-      - name: Deploy Infrastructure
-        run: |
-          az deployment group create \
-            --resource-group asx-db-rg \
-            --template-file infrastructure/main.bicep \
-            --parameters @infrastructure/main.parameters.${{ env.DEPLOY_ENV }}.json \
-            --mode Incremental
 
       # Optional: Only needed if you're using a blue-green deployment strategy
       # This swaps staging and production slots for zero-downtime deployments
