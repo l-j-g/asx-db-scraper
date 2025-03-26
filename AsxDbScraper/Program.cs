@@ -22,8 +22,13 @@ var host = new HostBuilder()
         services.AddHttpClient();
         services.AddScoped<IAlphaVantageService, AlphaVantageService>();
         services.AddScoped<IAsxCompanyService, AsxCompanyService>();
+
+        // Configure Cosmos DB
         services.AddDbContext<AsxDbContext>(options =>
-            options.UseSqlServer(context.Configuration.GetConnectionString("DefaultConnection")));
+            options.UseCosmos(
+                context.Configuration["CosmosDb:ConnectionString"],
+                context.Configuration["CosmosDb:DatabaseName"]
+            ));
     })
     .Build();
 

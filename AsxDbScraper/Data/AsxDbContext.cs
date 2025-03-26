@@ -18,20 +18,36 @@ public class AsxDbContext : DbContext
     {
         base.OnModelCreating(modelBuilder);
 
+        // Configure Cosmos DB container names
+        modelBuilder.Entity<AsxCompany>().ToContainer("Companies");
+        modelBuilder.Entity<BalanceSheet>().ToContainer("BalanceSheets");
+        modelBuilder.Entity<IncomeStatement>().ToContainer("IncomeStatements");
+        modelBuilder.Entity<CashFlowStatement>().ToContainer("CashFlowStatements");
+
+        // Configure partition keys
         modelBuilder.Entity<AsxCompany>()
-            .HasIndex(c => c.Code)
-            .IsUnique();
+            .HasPartitionKey(c => c.Code);
 
         modelBuilder.Entity<BalanceSheet>()
-            .HasIndex(b => new { b.CompanyCode, b.StatementDate })
-            .IsUnique();
+            .HasPartitionKey(b => b.CompanyCode);
 
         modelBuilder.Entity<IncomeStatement>()
-            .HasIndex(i => new { i.CompanyCode, i.StatementDate })
-            .IsUnique();
+            .HasPartitionKey(i => i.CompanyCode);
 
         modelBuilder.Entity<CashFlowStatement>()
-            .HasIndex(c => new { c.CompanyCode, c.StatementDate })
-            .IsUnique();
+            .HasPartitionKey(c => c.CompanyCode);
+
+        // Configure unique constraints
+        modelBuilder.Entity<AsxCompany>()
+            .HasUniqueIndex(c => c.Code);
+
+        modelBuilder.Entity<BalanceSheet>()
+            .HasUniqueIndex(b => new { b.CompanyCode, b.StatementDate });
+
+        modelBuilder.Entity<IncomeStatement>()
+            .HasUniqueIndex(i => new { i.CompanyCode, i.StatementDate });
+
+        modelBuilder.Entity<CashFlowStatement>()
+            .HasUniqueIndex(c => new { c.CompanyCode, c.StatementDate });
     }
-} 
+}
