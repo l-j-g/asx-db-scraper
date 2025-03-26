@@ -44,7 +44,7 @@
     },
     "cosmosDbAccountName": {
       "type": "string",
-      "defaultValue": "[format('{0}-{1}', parameters('projectName'), parameters('environment'))]",
+      "defaultValue": "lg-db",
       "metadata": {
         "description": "The Cosmos DB account name"
       }
@@ -119,13 +119,8 @@
         },
         "enableAutomaticFailover": false,
         "enableFreeTier": true,
-        "networkAclBypass": "AzureServices",
-        "networkAclBypassResourceIds": [],
         "publicNetworkAccess": "Enabled",
         "capabilities": [
-          {
-            "name": "EnableServerless"
-          },
           {
             "name": "EnableFreeTier"
           }
