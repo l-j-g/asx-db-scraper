@@ -57,7 +57,7 @@ jobs:
           az deployment group create \
             --resource-group asx-db-rg \
             --template-file infrastructure/main.bicep \
-            --parameters @infrastructure/main.parameters.prod.json \
+            --parameters @infrastructure/main.parameters.json \
             --mode Incremental
 
       - name: Deploy to Function App

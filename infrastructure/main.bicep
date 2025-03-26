@@ -1,6 +1,3 @@
-@description('The environment (dev, prod)')
-param environment string
-
 @description('The location for all resources')
 param location string
 
@@ -8,15 +5,15 @@ param location string
 param projectName string
 
 @description('The storage account name')
-param storageAccountName string = replace(toLower('${projectName}${environment}'), '-', '')
+param storageAccountName string = replace(toLower(projectName), '-', '')
 
 @description('The Cosmos DB account name')
-param cosmosDbAccountName string = '${projectName}-${environment}'
+param cosmosDbAccountName string = projectName
 
 @description('The Cosmos DB database name')
 param cosmosDbName string = 'AsxDbScraper'
 
-// Single Function App name without environment suffix
+// Function App name
 var functionAppName = projectName
 
 @description('The Cosmos DB container names')
@@ -115,7 +112,7 @@ resource appServicePlan 'Microsoft.Web/serverfarms@2022-09-01' = {
   }
 }
 
-// Create single Function App
+// Create Function App
 resource functionApp 'Microsoft.Web/sites@2022-09-01' = {
   name: functionAppName
   location: location
