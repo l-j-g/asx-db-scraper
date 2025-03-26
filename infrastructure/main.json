@@ -109,13 +109,16 @@
         "databaseAccountOfferType": "Standard",
         "locations": [
           {
-            "locationName": "[parameters('location')]"
+            "locationName": "[parameters('location')]",
+            "failoverPriority": 0,
+            "isZoneRedundant": false
           }
         ],
         "consistencyPolicy": {
           "defaultConsistencyLevel": "Session"
         },
-        "enableAutomaticFailover": true,
+        "enableAutomaticFailover": false,
+        "enableFreeTier": true,
         "networkAclBypass": "AzureServices",
         "networkAclBypassResourceIds": [],
         "publicNetworkAccess": "Disabled",
@@ -167,7 +170,8 @@
       "name": "[format('{0}-plan', parameters('functionAppName'))]",
       "location": "[parameters('location')]",
       "sku": {
-        "name": "Y1"
+        "name": "F1",
+        "tier": "Free"
       },
       "kind": "functionapp",
       "properties": {
