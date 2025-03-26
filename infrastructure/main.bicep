@@ -8,10 +8,10 @@ param projectName string
 param storageAccountName string = replace(toLower(projectName), '-', '')
 
 @description('The Cosmos DB account name')
-param cosmosDbAccountName string = projectName
+param cosmosDbAccountName string = 'lg-db'
 
 @description('The Cosmos DB database name')
-param cosmosDbName string = 'AsxDbScraper'
+param databaseName string = 'AsxDbScraper'
 
 // Function App name
 var functionAppName = projectName
@@ -52,26 +52,36 @@ resource cosmosDbAccount 'Microsoft.DocumentDB/databaseAccounts@2023-11-15' = {
     locations: [
       {
         locationName: location
+        failoverPriority: 0
+        isZoneRedundant: false
       }
     ]
     consistencyPolicy: {
       defaultConsistencyLevel: 'Session'
     }
-    enableAutomaticFailover: true
+    enableAutomaticFailover: false
+    enableFreeTier: true
     networkAclBypass: 'AzureServices'
     networkAclBypassResourceIds: []
     publicNetworkAccess: 'Enabled'
-    virtualNetworkRules: []
+    capabilities: [
+      {
+        name: 'EnableFreeTier'
+      }
+    ]
   }
 }
 
 // Create Cosmos DB database
 resource cosmosDb 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases@2023-11-15' = {
   parent: cosmosDbAccount
-  name: cosmosDbName
+  name: databaseName
   properties: {
     resource: {
-      id: cosmosDbName
+      id: databaseName
+    }
+    options: {
+      throughput: 1000
     }
   }
 }
@@ -86,6 +96,7 @@ resource cosmosDbContainers 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/
         id: container.name
         partitionKey: {
           paths: ['/id']
+          kind: 'Hash'
         }
         indexingPolicy: {
           indexingMode: 'consistent'
@@ -139,7 +150,7 @@ resource functionApp 'Microsoft.Web/sites@2022-09-01' = {
         }
         {
           name: 'CosmosDb__DatabaseName'
-          value: cosmosDbName
+          value: databaseName
         }
         {
           name: 'CosmosDb__ContainerName'
@@ -156,5 +167,5 @@ resource functionApp 'Microsoft.Web/sites@2022-09-01' = {
 
 // Output values (no secrets)
 output functionAppName string = functionApp.name
-output cosmosDbName string = cosmosDbName
+output databaseName string = databaseName
 output storageAccountName string = storageAccount.name
