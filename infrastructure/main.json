@@ -121,8 +121,15 @@
         "enableFreeTier": true,
         "networkAclBypass": "AzureServices",
         "networkAclBypassResourceIds": [],
-        "publicNetworkAccess": "Disabled",
-        "virtualNetworkRules": []
+        "publicNetworkAccess": "Enabled",
+        "capabilities": [
+          {
+            "name": "EnableServerless"
+          },
+          {
+            "name": "EnableFreeTier"
+          }
+        ]
       }
     },
     {
