@@ -40,7 +40,7 @@ jobs:
             --resource-group asx-db-rg \
             --template-file infrastructure/main.bicep \
             --parameters @infrastructure/main.parameters.${{ github.event.inputs.environment }}.json \
-            --parameters githubPrincipalId=${{ secrets.GITHUB_PRINCIPAL_ID }} \
+            --parameters githubPrincipalId=${{ secrets.PRINCIPAL_ID }} \
             --mode Incremental
 
       - name: Show Deployment Output
