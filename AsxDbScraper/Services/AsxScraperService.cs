@@ -1,6 +1,5 @@
-using Microsoft.Extensions.Logging;
 using AsxDbScraper.Models;
-
+using Microsoft.Extensions.Logging;
 namespace AsxDbScraper.Services;
 
 public interface IAsxScraperService

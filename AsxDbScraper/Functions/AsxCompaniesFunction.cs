@@ -1,9 +1,8 @@
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.Azure.WebJobs;
-using Microsoft.Azure.WebJobs.Extensions.Http;
-using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Logging;
+using System.Net;
+using Microsoft.Azure.Functions.Worker;
+using Microsoft.Azure.Functions.Worker.Http;
 using AsxDbScraper.Services;
+using Microsoft.Extensions.Logging;
 
 namespace AsxDbScraper.Functions;
 
@@ -20,42 +19,51 @@ public class AsxCompaniesFunction
         _logger = logger;
     }
 
-    [FunctionName("UpdateCompaniesList")]
-    public async Task<IActionResult> UpdateCompaniesListAsync(
-        [HttpTrigger(AuthorizationLevel.Function, "post", Route = null)] HttpRequest req)
+    [Function("UpdateCompaniesList")]
+    public async Task<HttpResponseData> UpdateCompaniesListAsync(
+        [HttpTrigger(AuthorizationLevel.Function, "post")] HttpRequestData req)
     {
         try
         {
             _logger.LogInformation("Triggering ASX companies list update");
             await _companyService.UpdateCompaniesListAsync();
-            return new OkObjectResult(new { message = "Companies list updated successfully" });
+
+            var response = req.CreateResponse(HttpStatusCode.OK);
+            await response.WriteAsJsonAsync(new { message = "Companies list updated successfully" });
+            return response;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error updating companies list");
-            return new StatusCodeResult(500);
+            var response = req.CreateResponse(HttpStatusCode.InternalServerError);
+            await response.WriteAsJsonAsync(new { message = "Internal server error" });
+            return response;
         }
     }
 
-    [FunctionName("GetAllCompanies")]
-    public async Task<IActionResult> GetAllCompaniesAsync(
-        [HttpTrigger(AuthorizationLevel.Function, "get", Route = null)] HttpRequest req)
+    [Function("GetAllCompanies")]
+    public async Task<HttpResponseData> GetAllCompaniesAsync(
+        [HttpTrigger(AuthorizationLevel.Function, "get")] HttpRequestData req)
     {
         try
         {
             var companies = await _companyService.GetAllCompaniesAsync();
-            return new OkObjectResult(companies);
+            var response = req.CreateResponse(HttpStatusCode.OK);
+            await response.WriteAsJsonAsync(companies);
+            return response;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error fetching companies list");
-            return new StatusCodeResult(500);
+            var response = req.CreateResponse(HttpStatusCode.InternalServerError);
+            await response.WriteAsJsonAsync(new { message = "Internal server error" });
+            return response;
         }
     }
 
-    [FunctionName("GetCompanyByCode")]
-    public async Task<IActionResult> GetCompanyByCodeAsync(
-        [HttpTrigger(AuthorizationLevel.Function, "get", Route = "companies/{code}")] HttpRequest req,
+    [Function("GetCompanyByCode")]
+    public async Task<HttpResponseData> GetCompanyByCodeAsync(
+        [HttpTrigger(AuthorizationLevel.Function, "get", Route = "companies/{code}")] HttpRequestData req,
         string code)
     {
         try
@@ -63,14 +71,21 @@ public class AsxCompaniesFunction
             var company = await _companyService.GetCompanyByCodeAsync(code);
             if (company == null)
             {
-                return new NotFoundObjectResult(new { message = $"Company with code {code} not found" });
+                var notFoundResponse = req.CreateResponse(HttpStatusCode.NotFound);
+                await notFoundResponse.WriteAsJsonAsync(new { message = $"Company with code {code} not found" });
+                return notFoundResponse;
             }
-            return new OkObjectResult(company);
+
+            var response = req.CreateResponse(HttpStatusCode.OK);
+            await response.WriteAsJsonAsync(company);
+            return response;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error fetching company with code {Code}", code);
-            return new StatusCodeResult(500);
+            var response = req.CreateResponse(HttpStatusCode.InternalServerError);
+            await response.WriteAsJsonAsync(new { message = "Internal server error" });
+            return response;
         }
     }
-} 
+}

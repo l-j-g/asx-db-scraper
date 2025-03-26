@@ -39,15 +39,15 @@ public class AsxDbContext : DbContext
 
         // Configure unique constraints
         modelBuilder.Entity<AsxCompany>()
-            .HasUniqueIndex(c => c.Code);
+            .HasIndex(c => c.Code);
 
         modelBuilder.Entity<BalanceSheet>()
-            .HasUniqueIndex(b => new { b.CompanyCode, b.StatementDate });
+            .HasIndex(b => new { b.CompanyCode, b.StatementDate });
 
         modelBuilder.Entity<IncomeStatement>()
-            .HasUniqueIndex(i => new { i.CompanyCode, i.StatementDate });
+            .HasIndex(i => new { i.CompanyCode, i.StatementDate });
 
         modelBuilder.Entity<CashFlowStatement>()
-            .HasUniqueIndex(c => new { c.CompanyCode, c.StatementDate });
+            .HasIndex(c => new { c.CompanyCode, c.StatementDate });
     }
 }

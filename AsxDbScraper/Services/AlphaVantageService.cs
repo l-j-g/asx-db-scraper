@@ -1,7 +1,8 @@
 using System.Text.Json;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Logging;
 using AsxDbScraper.Models;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Configuration;
+using System.Net.Http;
 
 namespace AsxDbScraper.Services;
 

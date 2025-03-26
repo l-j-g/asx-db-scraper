@@ -1,10 +1,9 @@
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.Azure.WebJobs;
-using Microsoft.Azure.WebJobs.Extensions.Http;
-using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Logging;
+using System.Net;
 using AsxDbScraper.Services;
 using AsxDbScraper.Data;
+using Microsoft.Azure.Functions.Worker;
+using Microsoft.Azure.Functions.Worker.Http;
+using Microsoft.Extensions.Logging;
 
 namespace AsxDbScraper.Functions;
 
@@ -24,19 +23,22 @@ public class ScrapeFinancialStatements
         _logger = logger;
     }
 
-    [FunctionName("ScrapeFinancialStatements")]
-    public async Task<IActionResult> RunAsync(
-        [HttpTrigger(AuthorizationLevel.Function, "post", Route = null)] HttpRequest req)
+    [Function("ScrapeFinancialStatements")]
+    public async Task<HttpResponseData> RunAsync(
+        [HttpTrigger(AuthorizationLevel.Function, "post")] HttpRequestData req)
     {
         try
         {
-            string companyCode = req.Query["companyCode"];
+            var query = System.Web.HttpUtility.ParseQueryString(req.Url.Query);
+            string companyCode = query["companyCode"];
             if (string.IsNullOrEmpty(companyCode))
             {
-                return new BadRequestObjectResult("Please provide a company code");
+                var badRequestResponse = req.CreateResponse(HttpStatusCode.BadRequest);
+                await badRequestResponse.WriteAsJsonAsync(new { message = "Please provide a company code" });
+                return badRequestResponse;
             }
 
-            if (!DateTime.TryParse(req.Query["statementDate"], out DateTime statementDate))
+            if (!DateTime.TryParse(query["statementDate"], out DateTime statementDate))
             {
                 statementDate = DateTime.UtcNow;
             }
@@ -57,17 +59,21 @@ public class ScrapeFinancialStatements
 
             await _dbContext.SaveChangesAsync();
 
-            return new OkObjectResult(new
+            var response = req.CreateResponse(HttpStatusCode.OK);
+            await response.WriteAsJsonAsync(new
             {
                 message = "Financial statements scraped successfully",
                 companyCode,
                 statementDate
             });
+            return response;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error scraping financial statements");
-            return new StatusCodeResult(500);
+            var response = req.CreateResponse(HttpStatusCode.InternalServerError);
+            await response.WriteAsJsonAsync(new { message = "Internal server error" });
+            return response;
         }
     }
-} 
+}

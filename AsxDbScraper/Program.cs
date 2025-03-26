@@ -5,14 +5,20 @@ using Serilog;
 using AsxDbScraper.Services;
 using AsxDbScraper.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Azure.Functions.Worker;
 
 var host = new HostBuilder()
-    .ConfigureFunctionsWorkerDefaults()
+    .ConfigureFunctionsWorkerDefaults(workerApplication =>
+    {
+        workerApplication.UseDefaultWorkerMiddleware();
+    })
     .ConfigureServices((context, services) =>
     {
+        var configuration = context.Configuration;
+
         // Configure Serilog
         Log.Logger = new LoggerConfiguration()
-            .ReadFrom.Configuration(context.Configuration)
+            .WriteTo.Console()
             .CreateLogger();
 
         // Register services
@@ -24,11 +30,13 @@ var host = new HostBuilder()
         services.AddScoped<IAsxCompanyService, AsxCompanyService>();
 
         // Configure Cosmos DB
+        var connectionString = configuration.GetValue<string>("CosmosDb:ConnectionString")
+            ?? throw new InvalidOperationException("Cosmos DB connection string not found in configuration");
+        var databaseName = configuration.GetValue<string>("CosmosDb:DatabaseName")
+            ?? throw new InvalidOperationException("Cosmos DB database name not found in configuration");
+
         services.AddDbContext<AsxDbContext>(options =>
-            options.UseCosmos(
-                context.Configuration["CosmosDb:ConnectionString"],
-                context.Configuration["CosmosDb:DatabaseName"]
-            ));
+            options.UseCosmos(connectionString, databaseName));
     })
     .Build();
 
