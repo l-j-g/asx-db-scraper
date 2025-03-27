@@ -117,3 +117,5 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd 
+.cursor/rules/dev-helper.mdc
+.cursor/rules/documenter.mdc

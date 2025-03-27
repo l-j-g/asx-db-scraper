@@ -8,6 +8,7 @@ namespace AsxDbScraper.Services;
 
 public interface IAlphaVantageService
 {
+    Task<IEnumerable<AsxCompany>> GetAsxCompaniesAsync();
     Task<BalanceSheet> GetBalanceSheetAsync(string companyCode);
     Task<IncomeStatement> GetIncomeStatementAsync(string companyCode);
     Task<CashFlowStatement> GetCashFlowStatementAsync(string companyCode);
@@ -28,6 +29,34 @@ public class AlphaVantageService : IAlphaVantageService
         _httpClient = httpClient;
         _logger = logger;
         _apiKey = configuration["AlphaVantage:ApiKey"] ?? throw new ArgumentNullException("AlphaVantage:ApiKey configuration is missing");
+    }
+
+    public async Task<IEnumerable<AsxCompany>> GetAsxCompaniesAsync()
+    {
+        try
+        {
+            // For now, return a list of major ASX companies
+            // In a real implementation, you would fetch this from ASX or another source
+            _logger.LogInformation("Generating list of ASX companies");
+            return new List<AsxCompany>
+            {
+                new AsxCompany { Code = "BHP", Name = "BHP Group Limited", Industry = "Mining" },
+                new AsxCompany { Code = "CSL", Name = "CSL Limited", Industry = "Healthcare" },
+                new AsxCompany { Code = "CBA", Name = "Commonwealth Bank of Australia", Industry = "Banking" },
+                new AsxCompany { Code = "NAB", Name = "National Australia Bank Limited", Industry = "Banking" },
+                new AsxCompany { Code = "ANZ", Name = "ANZ Banking Group Limited", Industry = "Banking" },
+                new AsxCompany { Code = "WBC", Name = "Westpac Banking Corporation", Industry = "Banking" },
+                new AsxCompany { Code = "MQG", Name = "Macquarie Group Limited", Industry = "Financial Services" },
+                new AsxCompany { Code = "WES", Name = "Wesfarmers Limited", Industry = "Retail" },
+                new AsxCompany { Code = "TLS", Name = "Telstra Corporation Limited", Industry = "Telecommunications" },
+                new AsxCompany { Code = "WOW", Name = "Woolworths Group Limited", Industry = "Retail" }
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting ASX companies");
+            throw;
+        }
     }
 
     public async Task<BalanceSheet> GetBalanceSheetAsync(string companyCode)

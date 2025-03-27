@@ -8,6 +8,7 @@
         <!-- Azure Functions -->
         <PackageVersion Include="Microsoft.Azure.Functions.Worker" Version="1.21.0" />
         <PackageVersion Include="Microsoft.Azure.Functions.Worker.Extensions.Http" Version="3.1.0" />
+        <PackageVersion Include="Microsoft.Azure.Functions.Worker.Extensions.Timer" Version="4.3.0" />
         <PackageVersion Include="Microsoft.Azure.Functions.Worker.Sdk" Version="1.17.0" />
         <PackageVersion Include="Microsoft.Azure.WebJobs.Extensions" Version="4.0.1" />
         <PackageVersion Include="Microsoft.Azure.WebJobs.Extensions.Http" Version="3.2.0" />

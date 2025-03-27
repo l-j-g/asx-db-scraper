@@ -1,116 +1,75 @@
+using Microsoft.Azure.Cosmos;
 using AsxDbScraper.Models;
-using AsxDbScraper.Data;
-using Microsoft.Extensions.Logging;
-namespace AsxDbScraper.Services;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 
-public interface IAsxCompanyService
+namespace AsxDbScraper.Services
 {
-    Task<IEnumerable<AsxCompany>> GetAllCompaniesAsync();
-    Task<AsxCompany?> GetCompanyByCodeAsync(string code);
-    Task UpdateCompaniesListAsync();
-}
-
-public class AsxCompanyService : IAsxCompanyService
-{
-    private readonly HttpClient _httpClient;
-    private readonly ILogger<AsxCompanyService> _logger;
-    private readonly AsxDbContext _dbContext;
-    private const string AsxListedCompaniesUrl = "https://www.asx.com.au/asx/research/ASXListedCompanies.csv";
-
-    public AsxCompanyService(
-        HttpClient httpClient,
-        ILogger<AsxCompanyService> logger,
-        AsxDbContext dbContext)
+    public interface IAsxCompanyService
     {
-        _httpClient = httpClient;
-        _logger = logger;
-        _dbContext = dbContext;
+        Task<IEnumerable<AsxCompany>> GetAllCompaniesAsync();
+        Task<AsxCompany> GetCompanyByCodeAsync(string code);
+        Task UpdateCompaniesListAsync();
     }
 
-    public async Task<IEnumerable<AsxCompany>> GetAllCompaniesAsync()
+    public class AsxCompanyService : IAsxCompanyService
     {
-        _logger.LogInformation("Fetching all ASX-listed companies from database");
-        return await Task.FromResult(_dbContext.AsxCompanies.Where(c => c.IsActive).OrderBy(c => c.Code));
-    }
+        private readonly CosmosClient _cosmosClient;
+        private readonly IAlphaVantageService _alphaVantageService;
+        private readonly string _databaseName = "AsxDbScraper";
+        private readonly string _containerName = "Companies";
 
-    public async Task<AsxCompany?> GetCompanyByCodeAsync(string code)
-    {
-        _logger.LogInformation("Fetching ASX company with code {Code}", code);
-        return await Task.FromResult(_dbContext.AsxCompanies.FirstOrDefault(c => c.Code == code && c.IsActive));
-    }
-
-    public async Task UpdateCompaniesListAsync()
-    {
-        try
+        public AsxCompanyService(CosmosClient cosmosClient, IAlphaVantageService alphaVantageService)
         {
-            _logger.LogInformation("Starting ASX companies list update");
-            
-            // Fetch the CSV file
-            var response = await _httpClient.GetStringAsync(AsxListedCompaniesUrl);
-            var lines = response.Split('\n').Skip(1); // Skip header row
+            _cosmosClient = cosmosClient;
+            _alphaVantageService = alphaVantageService;
+        }
 
-            // Parse companies
+        public async Task<IEnumerable<AsxCompany>> GetAllCompaniesAsync()
+        {
+            var container = _cosmosClient.GetContainer(_databaseName, _containerName);
+            var query = new QueryDefinition("SELECT * FROM c");
+            var iterator = container.GetItemQueryIterator<AsxCompany>(query);
             var companies = new List<AsxCompany>();
-            foreach (var line in lines)
-            {
-                if (string.IsNullOrWhiteSpace(line)) continue;
 
-                var fields = line.Split(',');
-                if (fields.Length >= 3)
-                {
-                    companies.Add(new AsxCompany
-                    {
-                        Code = fields[0].Trim('"'),
-                        Name = fields[1].Trim('"'),
-                        Industry = fields[2].Trim('"'),
-                        LastUpdated = DateTime.UtcNow,
-                        IsActive = true
-                    });
-                }
+            while (iterator.HasMoreResults)
+            {
+                var results = await iterator.ReadNextAsync();
+                companies.AddRange(results);
             }
 
-            _logger.LogInformation("Found {Count} companies in ASX list", companies.Count);
+            return companies;
+        }
 
-            // Update database
-            var existingCompanies = _dbContext.AsxCompanies.ToList();
+        public async Task<AsxCompany> GetCompanyByCodeAsync(string code)
+        {
+            var container = _cosmosClient.GetContainer(_databaseName, _containerName);
+            var query = new QueryDefinition("SELECT * FROM c WHERE c.code = @code")
+                .WithParameter("@code", code.ToUpper());
             
-            // Mark companies not in the new list as inactive
-            foreach (var existing in existingCompanies)
-            {
-                if (!companies.Any(c => c.Code == existing.Code))
-                {
-                    existing.IsActive = false;
-                    existing.LastUpdated = DateTime.UtcNow;
-                }
-                _logger.LogInformation("Updated ASX company {Code} to {IsActive}", existing.Code, existing.IsActive);
-            }
+            var iterator = container.GetItemQueryIterator<AsxCompany>(query);
+            var results = await iterator.ReadNextAsync();
 
-            // Add or update companies
+            return results.FirstOrDefault();
+        }
+
+        public async Task UpdateCompaniesListAsync()
+        {
+            var container = _cosmosClient.GetContainer(_databaseName, _containerName);
+            var companies = await _alphaVantageService.GetAsxCompaniesAsync();
+
             foreach (var company in companies)
             {
-                var existing = existingCompanies.FirstOrDefault(c => c.Code == company.Code);
-                if (existing == null)
+                try
                 {
-                    _dbContext.AsxCompanies.Add(company);
-                    _logger.LogInformation("Added ASX company {Code}", company.Code);
+                    await container.UpsertItemAsync(company, new PartitionKey(company.Code));
                 }
-                else
+                catch (Exception ex)
                 {
-                    existing.Name = company.Name;
-                    existing.Industry = company.Industry;
-                    existing.LastUpdated = DateTime.UtcNow;
-                    existing.IsActive = true;
-                    _logger.LogInformation("Updated ASX company {Code}", existing.Code);
+                    // Log error but continue processing
+                    Console.WriteLine($"Error processing company {company.Code}: {ex.Message}");
                 }
             }
-
-            await _dbContext.SaveChangesAsync();
-            _logger.LogInformation("Successfully updated ASX companies list");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error updating ASX companies list");
-            throw;
         }
     }
 } 
