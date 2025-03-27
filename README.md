@@ -1,115 +1,133 @@
 # ASX DB Scraper
 
-An Azure Function application that scrapes financial market data for Australian stocks from the ASX (Australian Securities Exchange). 
+A serverless Azure Function application that scrapes and stores financial data for Australian Securities Exchange (ASX) listed companies. This project efficiently collects balance sheets, income statements, and cash flow statements using a rate-limited approach that stays within free tier API limits.
 
-## Features
+![Azure](https://img.shields.io/badge/azure-%230072C6.svg?style=for-the-badge&logo=microsoftazure&logoColor=white)
+![C#](https://img.shields.io/badge/c%23-%23239120.svg?style=for-the-badge&logo=c-sharp&logoColor=white)
+![.Net](https://img.shields.io/badge/.NET-%235C2D91.svg?style=for-the-badge&logo=.net&logoColor=white)
+![Cosmos DB](https://img.shields.io/badge/Cosmos%20DB-0078D4.svg?style=for-the-badge&logo=microsoftazure&logoColor=white)
 
-- Automated process that runs as an Azure Function with HTTP trigger
-- Scrapes balance sheets, income statements, and cash flow statements
-- Stores data in SQL Server using Entity Framework Core
-- Logs operations using Serilog
-- Cross-platform support (Windows, macOS, Linux)
+## Architecture
 
-## Prerequisites
+![Architecture Diagram](docs/architecture.png)
+
+This project uses a modern cloud-native architecture:
+
+- **Azure Functions** - Serverless compute running on consumption plan (free tier)
+- **Azure Cosmos DB** - NoSQL database with free tier capabilities
+- **Alpha Vantage API** - Financial data source with free tier option
+- **Azure Key Vault** - Secure secret storage
+- **Azure Monitor** - Logging and monitoring
+
+### Key Technical Features
+
+- **Intelligent Rate Limiting** - Automatically rotates through companies based on data age
+- **Resilient Error Handling** - Comprehensive exception management prevents stuck processing
+- **Serverless Architecture** - Only pay for what you use (with substantial free tier limits)
+- **Dependency Injection** - Clean separation of concerns and improved testability
+- **Concurrency Control** - Semaphore pattern prevents duplicate processing
+- **JSON Document Storage** - Flexible schema for financial data
+- **Performance Metrics** - Runtime monitoring of processing times
+- **RESTful API Endpoint** - HTTP trigger for status monitoring
+
+## Cost Optimization
+
+This project is specifically designed to operate within free tiers:
+
+| Resource | Free Tier Limits | Project Usage |
+|----------|------------------|--------------|
+| Azure Functions | 1M executions/month | ~4,320 executions/month (every 10 min) |
+| Cosmos DB | 1000 RU/s, 25GB storage | < 100 RU/s typical, < 1GB storage |
+| Storage Account | 5GB LRS | < 100MB |
+| Alpha Vantage API | 5 calls/min, 500/day | 1 call per 10 min (144/day) |
+
+## Getting Started
+
+### Prerequisites
 
 - .NET 8.0 SDK
 - Azure Functions Core Tools
-- SQL Server (local or Azure)
-- Visual Studio 2022, VS Code with C# extension, or Rider
+- Azure account (free tier sufficient)
 - Alpha Vantage API key (free tier available)
 
-## Setup
+### Local Development Setup
 
 1. Clone the repository
-
-2. Get an Alpha Vantage API key:
-   - Go to https://www.alphavantage.co/support/#api-key
-   - Sign up for a free API key
-   - Copy your API key
-
-3. Set up SQL Server:
-   - For Windows: Install SQL Server Express LocalDB
-   - For macOS/Linux: Use Docker or Azure SQL Database
-   - Update the connection string in `local.settings.json` with your SQL Server details
-
-4. Update the configuration:
-   - Open `local.settings.json`
-   - Replace `YOUR_API_KEY_HERE` with your Alpha Vantage API key
-   - Update the connection string if needed
-
-5. Run the following commands to restore packages and build:
    ```bash
-   dotnet restore
-   dotnet build
+   git clone https://github.com/yourusername/asx-db-scraper.git
+   cd asx-db-scraper
    ```
 
-6. Run the following command to create the database:
-   ```bash
-   dotnet ef database update
+2. Get an Alpha Vantage API key from [alphavantage.co](https://www.alphavantage.co/support/#api-key)
+
+3. Create `local.settings.json` file:
+   ```json
+   {
+     "IsEncrypted": false,
+     "Values": {
+       "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+       "FUNCTIONS_WORKER_RUNTIME": "dotnet",
+       "CosmosDb:ConnectionString": "<your-cosmos-db-connection-string>",
+       "CosmosDb:DatabaseName": "AsxDbScraper",
+       "AlphaVantage:ApiKey": "<your-api-key>"
+     }
+   }
    ```
 
-7. Start the Azure Functions host:
+4. Run the function app locally:
    ```bash
    func start
    ```
 
-## Development Environment Setup
+### Cloud Deployment
 
-### Windows
-- Install Visual Studio 2022 or VS Code with C# extension
-- Install SQL Server Express LocalDB
-- Install Azure Functions Core Tools
+Deploy to Azure using the Infrastructure as Code (IaC) template:
 
-### macOS
-- Install VS Code with C# extension or JetBrains Rider
-- Install Docker Desktop for running SQL Server
-- Install Azure Functions Core Tools:
-  ```bash
-   brew tap azure/functions
-   brew install azure-functions-core-tools@4
-   ```
-
-### Linux
-- Install VS Code with C# extension or JetBrains Rider
-- Install Docker for running SQL Server
-- Install Azure Functions Core Tools:
-  ```bash
-   curl https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > microsoft.gpg
-   sudo mv microsoft.gpg /etc/apt/trusted.gpg.d/microsoft.gpg
-   sudo sh -c 'echo "deb [arch=amd64] https://packages.microsoft.com/repos/microsoft-ubuntu-$(lsb_release -cs)-prod $(lsb_release -cs) main" > /etc/apt/sources.list.d/dotnetdev.list'
-   sudo apt-get update
-   sudo apt-get install azure-functions-core-tools-4
-   ```
-
-## Usage
-
-The function can be triggered via HTTP POST request with the following query parameters:
-- `companyCode`: The ASX company code (e.g., "BHP")
-- `statementDate`: (Optional) The date of the financial statements. Defaults to current date.
-
-Example request:
+```bash
+az login
+az account set --subscription "<your-subscription-id>"
+az group create --name asx-db-scraper-rg --location australiaeast
+az deployment group create --resource-group asx-db-scraper-rg --template-file infrastructure/main.bicep
 ```
-POST http://localhost:7071/api/ScrapeFinancialStatements?companyCode=BHP&statementDate=2024-03-20
-```
-
-Note: Alpha Vantage's free tier has a limit of 5 API calls per minute. The function will automatically handle rate limiting.
 
 ## Project Structure
 
-- `Models/`: Contains the data models for financial statements
-- `Data/`: Contains the Entity Framework DbContext
-- `Services/`: Contains the ASX scraping service and Alpha Vantage integration
-- `Functions/`: Contains the Azure Function implementation
-- `logs/`: Contains application logs (created automatically)
+- `Functions/` - Azure Function triggers
+  - `FinancialDataFunction.cs` - Timer trigger for scraping and HTTP endpoint for status
+  - `AsxCompaniesFunction.cs` - HTTP endpoints for company data
+- `Services/` - Business logic services
+  - `AsxScraperService.cs` - Core scraping orchestration service
+  - `AsxCompanyService.cs` - Company data management
+  - `AlphaVantageService.cs` - Financial data provider integration
+- `Models/` - Data models
+- `infrastructure/` - IaC templates for Azure deployment
 
-## Contributing
+## Monitoring and Management
 
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
+Monitor the scraper progress using the built-in status API:
+
+```bash
+curl https://your-function-app.azurewebsites.net/api/GetScraperStatus?code=<function-key>
+```
+
+Response:
+```json
+{
+  "status": "running",
+  "queueLength": 42,
+  "interval": "10 minutes",
+  "timestamp": "2024-03-26T12:34:56.789Z"
+}
+```
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details. 
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Future Enhancements
+
+- Web front-end for data visualization
+- Machine learning predictions for stock performance
+- Historical data analysis
+- Real-time data streaming with SignalR
+- Multi-region deployment for global redundancy 
