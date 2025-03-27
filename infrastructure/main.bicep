@@ -48,27 +48,19 @@ resource cosmosDbAccount 'Microsoft.DocumentDB/databaseAccounts@2023-11-15' = {
   location: location
   kind: 'GlobalDocumentDB'
   properties: {
+    enableFreeTier: true
     databaseAccountOfferType: 'Standard'
     locations: [
       {
         locationName: location
-        failoverPriority: 0
-        isZoneRedundant: false
       }
     ]
     consistencyPolicy: {
       defaultConsistencyLevel: 'Session'
     }
-    enableAutomaticFailover: false
-    enableFreeTier: true
     networkAclBypass: 'AzureServices'
     networkAclBypassResourceIds: []
     publicNetworkAccess: 'Enabled'
-    capabilities: [
-      {
-        name: 'EnableFreeTier'
-      }
-    ]
   }
 }
 
